@@ -1,0 +1,8 @@
+{
+  "name": "Workshop AI Controller",
+  "description": "An AI-powered application to control workshop tools via voice commands, analyze uploaded images, and research topics with real-time information from the web.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}

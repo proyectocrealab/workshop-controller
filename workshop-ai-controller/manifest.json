@@ -1,0 +1,16 @@
+{
+  "short_name": "Workshop AI",
+  "name": "Workshop AI Controller",
+  "description": "An AI-powered application to control workshop tools and assist with projects.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0891b2",
+  "background_color": "#111827"
+}
