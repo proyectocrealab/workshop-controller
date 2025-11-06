@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-// FIX: Removed unexported 'LiveSession' type from import.
-import { GoogleGenAI, LiveServerMessage, Modality, FunctionDeclaration, Type } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, FunctionDeclaration, Type, Session } from '@google/genai';
 import { PowerIcon, CameraIcon, MicIcon, StopCircleIcon, RssIcon, CncIcon, PlayIcon, PauseIcon, StopIcon, WifiIcon, PlugXIcon, ScanIcon } from './Icons';
 
 // Audio helper functions
@@ -138,8 +137,6 @@ const NetworkScanner: React.FC<{
             // Set a timeout to abort this specific request
             const timeoutId = setTimeout(() => perRequestController.abort(), 1500);
             
-            // FIX: Replaced `AbortSignal.any` which may not be available in all TS environments.
-            // This implementation manually combines a global abort signal with a per-request timeout signal.
             const promise = fetch(`http://${ip}/status`, {
                 signal: perRequestController.signal
             }).then(response => {
@@ -237,7 +234,7 @@ const NetworkScanner: React.FC<{
     );
 };
 
-export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey }) => {
+export const WorkshopControl: React.FC = () => {
     // Component State
     const [dustCollectorOn, setDustCollectorOn] = useState(false);
     const [lights, setLights] = useState<LightState>({ power: 'off', r: 255, g: 220, b: 180 });
@@ -257,8 +254,7 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
     const [wsAddress, setWsAddress] = useState('ws://192.168.1.123:8765');
     
     // Refs
-    // FIX: Replaced unexported 'LiveSession' with 'any' for the session promise ref.
-    const sessionPromise = useRef<Promise<any> | null>(null);
+    const sessionPromise = useRef<Promise<Session> | null>(null);
     const mediaStream = useRef<MediaStream | null>(null);
     const audioContext = useRef<AudioContext | null>(null);
     const scriptProcessor = useRef<ScriptProcessorNode | null>(null);
@@ -281,10 +277,6 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
             });
             if (!response.ok) throw new Error('Device not responding or incorrect API format.');
             
-            // Optional: You could parse the response to get the light's initial state
-            // const data = await response.json();
-            // setLights(data.state);
-
             setLightConnectionStatus('Connected');
         } catch (error) {
             console.error("Failed to connect to light:", error);
@@ -527,7 +519,6 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
         if (track) {
             try {
                 const newZoom = parseFloat(e.target.value);
-                // FIX: Suppress TypeScript error for non-standard 'zoom' constraint.
                 // @ts-ignore
                 await track.applyConstraints({ advanced: [{ zoom: newZoom }] });
                 setZoomLevel(newZoom);
@@ -563,16 +554,18 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
     }, [isListening]);
 
     const startConversation = useCallback(async () => {
-        if (isListening || !apiKey) {
-            if (!apiKey) {
-                alert("Please set your Gemini API key to use the voice assistant.");
-            }
+        if (isListening) {
             return;
         }
+        if (!process.env.API_KEY) {
+            alert("API key is not configured. Voice assistant is disabled.");
+            return;
+        }
+
         setIsListening(true);
         setTranscripts([]);
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         let currentInputTranscription = '';
 
         const outputAudioContext = new (window.AudioContext)({ sampleRate: 24000 });
@@ -625,7 +618,6 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
                     if (message.toolCall) {
                         for (const fc of message.toolCall.functionCalls) {
                             let result = "ok";
-                            // FIX: Cast arguments from function call response to their expected types, as they are 'unknown' by default.
                             try {
                                 if (fc.name === 'controlDustCollector') setDustCollectorOn((fc.args.power as string) === 'on');
                                 else if (fc.name === 'controlLights') {
@@ -676,7 +668,7 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
                  systemInstruction: 'You are an AI assistant for a prototyping workshop. Be concise. Respond to commands to control tools. Inform the user when an action is taken.',
             }
         });
-    }, [isListening, apiKey, handleCncPlay, handleCncPause, handleCncStop, stopConversation, applyLightStateFromVoice]);
+    }, [isListening, handleCncPlay, handleCncPause, handleCncStop, stopConversation, applyLightStateFromVoice]);
     
     const rgbToHex = (r: number, g: number, b: number) => `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
 
@@ -916,12 +908,11 @@ export const WorkshopControl: React.FC<{ apiKey: string | null }> = ({ apiKey })
             {/* Voice Assistant */}
             <div className="bg-gray-800/50 rounded-lg p-6 flex flex-col shadow-lg">
                 <h3 className="text-xl font-bold text-white mb-4 text-center">Voice Assistant</h3>
-                <div className="relative" title={!apiKey ? 'Please provide a Gemini API key to enable the voice assistant.' : ''}>
+                <div className="relative">
                     {!isListening ? (
                         <button 
                             onClick={startConversation} 
-                            disabled={!apiKey}
-                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-transform duration-200 hover:scale-105 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:scale-100"
+                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-transform duration-200 hover:scale-105"
                         >
                             <MicIcon />
                             Start Conversation

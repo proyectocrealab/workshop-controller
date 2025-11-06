@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-// FIX: Removed unexported 'LiveSession' type from import.
-import { GoogleGenAI, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Session } from '@google/genai';
 import { UploadIcon, BotIcon, SparklesIcon, MicIcon, StopCircleIcon } from './Icons';
 
 // Audio helper function to encode raw audio bytes to base64
@@ -13,7 +12,7 @@ function encode(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) => {
+export const ImageAnalyzer: React.FC = () => {
     const [image, setImage] = useState<string | null>(null);
     const [imageMimeType, setImageMimeType] = useState<string | null>(null);
     const [prompt, setPrompt] = useState<string>('Describe this image in detail.');
@@ -26,8 +25,7 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
     
     // Refs for audio processing and live session
     const transcriptRef = useRef('');
-    // FIX: Replaced unexported 'LiveSession' with 'any' for the session promise ref.
-    const sessionPromise = useRef<Promise<any> | null>(null);
+    const sessionPromise = useRef<Promise<Session> | null>(null);
     const mediaStream = useRef<MediaStream | null>(null);
     const audioContext = useRef<AudioContext | null>(null);
     const scriptProcessor = useRef<ScriptProcessorNode | null>(null);
@@ -58,8 +56,12 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
 
     const analyzeImage = useCallback(async (promptOverride?: string) => {
         const currentPrompt = promptOverride || prompt;
-        if (!image || !currentPrompt || !apiKey || !imageMimeType) {
-            setError(apiKey ? 'Please upload an image and provide a prompt.' : 'Please provide an API key to use the analyzer.');
+        if (!image || !currentPrompt || !imageMimeType) {
+            setError('Please upload an image and provide a prompt.');
+            return;
+        }
+         if (!process.env.API_KEY) {
+            setError('API Key is not configured. Analysis is disabled.');
             return;
         }
         
@@ -68,7 +70,7 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
         setAnalysis('');
 
         try {
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const imagePart = await fileToGenerativePart(image, imageMimeType);
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -83,7 +85,7 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
         } finally {
             setLoading(false);
         }
-    }, [image, prompt, imageMimeType, apiKey]);
+    }, [image, prompt, imageMimeType]);
 
 
     const stopConversation = useCallback(() => {
@@ -107,17 +109,18 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
 
 
     const startConversation = useCallback(async () => {
-        if (isListening || !apiKey) {
-            if (!apiKey) {
-                alert("Please set your Gemini API key to use the voice prompt.");
-            }
+        if (isListening) {
+            return;
+        }
+        if (!process.env.API_KEY) {
+            alert("API Key is not configured. Voice prompt is disabled.");
             return;
         }
         setIsListening(true);
         setLiveTranscript('');
         transcriptRef.current = '';
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         sessionPromise.current = ai.live.connect({
             model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -171,7 +174,7 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
                 systemInstruction: "You are a voice assistant that transcribes a user's question about an image. Be as accurate as possible. Do not respond, only transcribe.",
             }
         });
-    }, [isListening, analyzeImage, stopConversation, apiKey]);
+    }, [isListening, analyzeImage, stopConversation]);
 
 
     return (
@@ -207,10 +210,8 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
                              <label htmlFor="prompt" className="font-semibold text-gray-300">Your Prompt</label>
                              <button
                                 onClick={isListening ? stopConversation : startConversation}
-                                disabled={!apiKey}
-                                className={`p-2 rounded-full transition-colors ${isListening ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-600 hover:bg-gray-500 text-gray-200'} disabled:bg-gray-700 disabled:cursor-not-allowed disabled:text-gray-500`}
+                                className={`p-2 rounded-full transition-colors ${isListening ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-600 hover:bg-gray-500 text-gray-200'}`}
                                 aria-label={isListening ? 'Stop recording' : 'Start voice prompt'}
-                                title={!apiKey ? 'Please provide a Gemini API key to use voice prompts.' : ''}
                             >
                                 {isListening ? <StopCircleIcon className="w-5 h-5" /> : <MicIcon className="w-5 h-5" />}
                             </button>
@@ -226,9 +227,8 @@ export const ImageAnalyzer: React.FC<{ apiKey: string | null }> = ({ apiKey }) =
                         />
                          <button
                             onClick={() => analyzeImage()}
-                            disabled={loading || !image || isListening || !apiKey}
+                            disabled={loading || !image || isListening}
                             className="mt-4 w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
-                            title={!apiKey ? 'Please provide a Gemini API key to analyze images.' : ''}
                         >
                             {loading ? (
                                 <>

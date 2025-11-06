@@ -45,19 +45,30 @@ const Source: React.FC<{ source: any }> = ({ source }) => {
 };
 
 
-export const ResearchAssistant: React.FC<{ apiKey: string | null }> = ({ apiKey }) => {
+export const ResearchAssistant: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
     const chatContainerRef = useRef<HTMLDivElement>(null);
+    const [isKeyAvailable, setIsKeyAvailable] = useState(false);
+
+    useEffect(() => {
+      // The environment variable is only available at runtime, so we check it here.
+      setIsKeyAvailable(!!process.env.API_KEY);
+    }, []);
     
     useEffect(() => {
         chatContainerRef.current?.scrollTo(0, chatContainerRef.current.scrollHeight);
     }, [messages]);
 
     const handleSend = async () => {
-        if (!input.trim() || !apiKey) return;
+        if (!input.trim() || !process.env.API_KEY) {
+            if (!process.env.API_KEY) {
+                setError('API Key is not configured. Research is disabled.');
+            }
+            return;
+        }
 
         const userMessage: Message = { role: 'user', text: input };
         setMessages(prev => [...prev, userMessage]);
@@ -66,7 +77,7 @@ export const ResearchAssistant: React.FC<{ apiKey: string | null }> = ({ apiKey 
         setError('');
 
         try {
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: input,
@@ -102,13 +113,13 @@ export const ResearchAssistant: React.FC<{ apiKey: string | null }> = ({ apiKey 
                 {messages.length === 0 && !loading && (
                     <div className="text-center text-gray-500 h-full flex flex-col justify-center items-center">
                         <BotIcon className="w-16 h-16 mb-4"/>
-                        {apiKey ? (
+                        {isKeyAvailable ? (
                             <>
                                 <p>Ask anything. I'll search the web for the latest info.</p>
                                 <p className="text-sm mt-2">e.g., "What are the latest advancements in AI?"</p>
                             </>
                         ) : (
-                             <p className="font-semibold text-yellow-400">Please provide a Gemini API key to start researching.</p>
+                             <p className="font-semibold text-yellow-400">API Key not configured. Research assistant is disabled.</p>
                         )}
                     </div>
                 )}
@@ -152,11 +163,11 @@ export const ResearchAssistant: React.FC<{ apiKey: string | null }> = ({ apiKey 
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && !loading && handleSend()}
-                        placeholder={apiKey ? "Ask me anything..." : "API Key required"}
+                        placeholder={isKeyAvailable ? "Ask me anything..." : "API Key required"}
                         className="w-full bg-transparent p-2 text-gray-200 focus:outline-none disabled:cursor-not-allowed"
-                        disabled={loading || !apiKey}
+                        disabled={loading || !isKeyAvailable}
                     />
-                    <button onClick={handleSend} disabled={loading || !input.trim() || !apiKey} className="bg-cyan-600 text-white rounded-md p-2 hover:bg-cyan-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors">
+                    <button onClick={handleSend} disabled={loading || !input.trim() || !isKeyAvailable} className="bg-cyan-600 text-white rounded-md p-2 hover:bg-cyan-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors">
                         <SendIcon />
                     </button>
                 </div>
